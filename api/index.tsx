@@ -28,13 +28,13 @@ interface CastInfo {
 
 async function checkRecastStatus(castHash: string, fid: string): Promise<CastInfo | null> {
   const query = `
-    query CheckRecast {
+    query CheckRecast($hash: String!, $fid: String!) {
       FarcasterReactions(
         input: {
           filter: {
-            criteria: recasted,
-            hash: {_eq: "${castHash}"},
-            reactedBy: {_eq: "fc_fid:${fid}"}
+            criteria: {_eq: recasted},
+            hash: {_eq: $hash},
+            reactedBy: {_eq: $fid}
           },
           blockchain: ALL
         }
@@ -54,17 +54,27 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
     }
   `
 
+  const variables = {
+    hash: castHash,
+    fid: `fc_fid:${fid}`
+  }
+
   try {
+    console.log('Sending request to Airstack API with query:', query);
+    console.log('Variables:', JSON.stringify(variables, null, 2));
+
     const response = await fetch(AIRSTACK_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': AIRSTACK_API_KEY,
       },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, variables }),
     })
 
     if (!response.ok) {
+      const errorBody = await response.text();
+      console.error(`HTTP error! status: ${response.status}, body:`, errorBody);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
@@ -89,9 +99,9 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
 
     // If no reaction found, fetch the cast info separately
     const castInfoQuery = `
-      query GetCastInfo {
+      query GetCastInfo($hash: String!) {
         FarcasterCasts(
-          input: {filter: {hash: {_eq: "${castHash}"}}, blockchain: ALL}
+          input: {filter: {hash: {_eq: $hash}}, blockchain: ALL}
         ) {
           Cast {
             hash
@@ -105,17 +115,25 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
         }
       }
     `
+    
+    const castInfoVariables = { hash: castHash };
+
+    console.log('Sending request to Airstack API for cast info with query:', castInfoQuery);
+    console.log('Variables:', JSON.stringify(castInfoVariables, null, 2));
+
     const castInfoResponse = await fetch(AIRSTACK_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': AIRSTACK_API_KEY,
       },
-      body: JSON.stringify({ query: castInfoQuery }),
+      body: JSON.stringify({ query: castInfoQuery, variables: castInfoVariables }),
     })
 
     if (!castInfoResponse.ok) {
-      throw new Error(`HTTP error! status: ${castInfoResponse.status}`);
+      const errorBody = await castInfoResponse.text();
+      console.error(`HTTP error in cast info request! status: ${castInfoResponse.status}, body:`, errorBody);
+      throw new Error(`HTTP error in cast info request! status: ${castInfoResponse.status}`);
     }
 
     const castInfoData = await castInfoResponse.json();
@@ -197,6 +215,7 @@ app.frame('/check-interaction', async (c) => {
   }
 
   try {
+    console.log('Checking recast status for FID:', fid, 'and castHash:', castHash);
     const castInfo = await checkRecastStatus(castHash, fid.toString())
 
     if (!castInfo) {
@@ -224,6 +243,8 @@ app.frame('/check-interaction', async (c) => {
         ],
       })
     }
+
+    console.log('Cast info retrieved:', JSON.stringify(castInfo, null, 2));
 
     return c.res({
       image: (
