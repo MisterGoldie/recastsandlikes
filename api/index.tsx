@@ -2,7 +2,6 @@
 import { Button, Frog } from 'frog'
 import { handle } from 'frog/vercel'
 import { neynar } from 'frog/middlewares'
-import axios from 'axios'
 
 const app = new Frog({
   basePath: '/api',
@@ -17,7 +16,6 @@ const app = new Frog({
 
 const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql'
 const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'
-const AXIOS_TIMEOUT = 8000 // 8 seconds timeout
 const BACKGROUND_IMAGE = 'https://bafybeig776f35t7q6fybqfe4zup2kmiqychy4rcdncjjl5emahho6rqt6i.ipfs.w3s.link/Thumbnail%20(31).png'
 
 interface CastInfo {
@@ -57,18 +55,23 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
   `
 
   try {
-    const response = await axios.post(
-      AIRSTACK_API_URL,
-      { query },
-      { 
-        headers: { 'Authorization': AIRSTACK_API_KEY },
-        timeout: AXIOS_TIMEOUT
-      }
-    )
+    const response = await fetch(AIRSTACK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': AIRSTACK_API_KEY,
+      },
+      body: JSON.stringify({ query }),
+    })
 
-    console.log('Airstack API Response:', JSON.stringify(response.data, null, 2));
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
 
-    const reactions = response.data?.data?.FarcasterReactions?.Reaction;
+    const data = await response.json();
+    console.log('Airstack API Response:', JSON.stringify(data, null, 2));
+
+    const reactions = data?.data?.FarcasterReactions?.Reaction;
     if (reactions && reactions.length > 0) {
       const cast = reactions[0].cast;
       if (cast) {
@@ -102,18 +105,23 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
         }
       }
     `
-    const castInfoResponse = await axios.post(
-      AIRSTACK_API_URL,
-      { query: castInfoQuery },
-      { 
-        headers: { 'Authorization': AIRSTACK_API_KEY },
-        timeout: AXIOS_TIMEOUT
-      }
-    )
+    const castInfoResponse = await fetch(AIRSTACK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': AIRSTACK_API_KEY,
+      },
+      body: JSON.stringify({ query: castInfoQuery }),
+    })
 
-    console.log('Cast Info Response:', JSON.stringify(castInfoResponse.data, null, 2));
+    if (!castInfoResponse.ok) {
+      throw new Error(`HTTP error! status: ${castInfoResponse.status}`);
+    }
 
-    const castInfo = castInfoResponse.data?.data?.FarcasterCasts?.Cast?.[0];
+    const castInfoData = await castInfoResponse.json();
+    console.log('Cast Info Response:', JSON.stringify(castInfoData, null, 2));
+
+    const castInfo = castInfoData?.data?.FarcasterCasts?.Cast?.[0];
     if (castInfo) {
       const numberOfRecasts = castInfo.reactions.find((r: any) => r.reactionType === 'RECAST')?.count || 0;
       const numberOfLikes = castInfo.reactions.find((r: any) => r.reactionType === 'LIKE')?.count || 0;
@@ -130,9 +138,6 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
     return null;
   } catch (error) {
     console.error('Error checking recast status:', error);
-    if (axios.isAxiosError(error)) {
-      console.error('Axios error details:', error.response?.data);
-    }
     return null;
   }
 }
