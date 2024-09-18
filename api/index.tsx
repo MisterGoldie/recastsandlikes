@@ -18,7 +18,6 @@ const app = new Frog({
 const AIRSTACK_API_URL = 'https://api.airstack.xyz/gql'
 const AIRSTACK_API_KEY = '103ba30da492d4a7e89e7026a6d3a234e'
 const AXIOS_TIMEOUT = 8000 // 8 seconds timeout
-const BACKGROUND_IMAGE = 'https://bafybeig776f35t7q6fybqfe4zup2kmiqychy4rcdncjjl5emahho6rqt6i.ipfs.w3s.link/Thumbnail%20(31).png'
 
 interface CastInfo {
   castedAtTimestamp: string;
@@ -35,7 +34,7 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
         input: {
           filter: {
             criteria: recasted,
-            hash: {_eq: "${castHash}"},
+            castHash: {_eq: "${castHash}"},
             reactedBy: {_eq: "fc_fid:${fid}"}
           },
           blockchain: ALL
@@ -43,13 +42,10 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
       ) {
         Reaction {
           cast {
-            hash
-            timestamp
+            castedAtTimestamp
             text
-            reactions {
-              count
-              reactionType
-            }
+            numberOfRecasts
+            numberOfLikes
           }
         }
       }
@@ -72,13 +68,11 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
     if (reactions && reactions.length > 0) {
       const cast = reactions[0].cast;
       if (cast) {
-        const numberOfRecasts = cast.reactions.find((r: any) => r.reactionType === 'RECAST')?.count || 0;
-        const numberOfLikes = cast.reactions.find((r: any) => r.reactionType === 'LIKE')?.count || 0;
         return {
-          castedAtTimestamp: cast.timestamp || '',
+          castedAtTimestamp: cast.castedAtTimestamp || '',
           text: cast.text || '',
-          numberOfRecasts,
-          numberOfLikes,
+          numberOfRecasts: cast.numberOfRecasts || 0,
+          numberOfLikes: cast.numberOfLikes || 0,
           hasRecasted: true
         };
       }
@@ -88,16 +82,13 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
     const castInfoQuery = `
       query GetCastInfo {
         FarcasterCasts(
-          input: {filter: {hash: {_eq: "${castHash}"}}, blockchain: ALL}
+          input: {filter: {castHash: {_eq: "${castHash}"}}, blockchain: ALL}
         ) {
           Cast {
-            hash
-            timestamp
+            castedAtTimestamp
             text
-            reactions {
-              count
-              reactionType
-            }
+            numberOfRecasts
+            numberOfLikes
           }
         }
       }
@@ -115,13 +106,11 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
 
     const castInfo = castInfoResponse.data?.data?.FarcasterCasts?.Cast?.[0];
     if (castInfo) {
-      const numberOfRecasts = castInfo.reactions.find((r: any) => r.reactionType === 'RECAST')?.count || 0;
-      const numberOfLikes = castInfo.reactions.find((r: any) => r.reactionType === 'LIKE')?.count || 0;
       return {
-        castedAtTimestamp: castInfo.timestamp || '',
+        castedAtTimestamp: castInfo.castedAtTimestamp || '',
         text: castInfo.text || '',
-        numberOfRecasts,
-        numberOfLikes,
+        numberOfRecasts: castInfo.numberOfRecasts || 0,
+        numberOfLikes: castInfo.numberOfLikes || 0,
         hasRecasted: false
       };
     }
@@ -140,20 +129,9 @@ async function checkRecastStatus(castHash: string, fid: string): Promise<CastInf
 app.frame('/', (c) => {
   return c.res({
     image: (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        width: '100%', 
-        height: '100%', 
-        backgroundImage: `url(${BACKGROUND_IMAGE})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <h1 style={{ fontSize: '48px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Frame Interaction Checker</h1>
-        <p style={{ fontSize: '24px', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Check your interaction with a specific cast</p>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0', fontFamily: 'Arial, sans-serif' }}>
+        <h1 style={{ fontSize: '48px', color: '#333', marginBottom: '20px' }}>Frame Interaction Checker</h1>
+        <p style={{ fontSize: '24px', color: '#666' }}>Check your interaction with a specific cast</p>
       </div>
     ),
     intents: [
@@ -169,20 +147,9 @@ app.frame('/check-interaction', async (c) => {
   if (!fid) {
     return c.res({
       image: (
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          width: '100%', 
-          height: '100%', 
-          backgroundImage: `url(${BACKGROUND_IMAGE})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          fontFamily: 'Arial, sans-serif'
-        }}>
-          <h1 style={{ fontSize: '48px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Error</h1>
-          <p style={{ fontSize: '24px', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Unable to retrieve user information</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0', fontFamily: 'Arial, sans-serif' }}>
+          <h1 style={{ fontSize: '48px', color: '#333', marginBottom: '20px' }}>Error</h1>
+          <p style={{ fontSize: '24px', color: '#666' }}>Unable to retrieve user information</p>
         </div>
       ),
       intents: [
@@ -197,20 +164,9 @@ app.frame('/check-interaction', async (c) => {
     if (!castInfo) {
       return c.res({
         image: (
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            width: '100%', 
-            height: '100%', 
-            backgroundImage: `url(${BACKGROUND_IMAGE})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-            fontFamily: 'Arial, sans-serif'
-          }}>
-            <h1 style={{ fontSize: '48px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Cast Not Found</h1>
-            <p style={{ fontSize: '24px', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Unable to find information for this cast</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0', fontFamily: 'Arial, sans-serif' }}>
+            <h1 style={{ fontSize: '48px', color: '#333', marginBottom: '20px' }}>Information Unavailable</h1>
+            <p style={{ fontSize: '24px', color: '#666' }}>Unable to fetch cast information at the moment. Please try again later.</p>
           </div>
         ),
         intents: [
@@ -222,25 +178,14 @@ app.frame('/check-interaction', async (c) => {
 
     return c.res({
       image: (
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          width: '100%', 
-          height: '100%', 
-          backgroundImage: `url(${BACKGROUND_IMAGE})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          fontFamily: 'Arial, sans-serif'
-        }}>
-          <h1 style={{ fontSize: '36px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Cast Interaction Status</h1>
-          <p style={{ fontSize: '24px', color: 'white', marginBottom: '10px', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Recasts: {castInfo.numberOfRecasts}</p>
-          <p style={{ fontSize: '24px', color: 'white', marginBottom: '10px', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>Likes: {castInfo.numberOfLikes}</p>
-          <p style={{ fontSize: '24px', color: 'white', marginBottom: '20px', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0', fontFamily: 'Arial, sans-serif' }}>
+          <h1 style={{ fontSize: '36px', color: '#333', marginBottom: '20px' }}>Cast Interaction Status</h1>
+          <p style={{ fontSize: '24px', color: '#666', marginBottom: '10px' }}>Recasts: {castInfo.numberOfRecasts}</p>
+          <p style={{ fontSize: '24px', color: '#666', marginBottom: '10px' }}>Likes: {castInfo.numberOfLikes}</p>
+          <p style={{ fontSize: '24px', color: '#666', marginBottom: '20px' }}>
             You have {castInfo.hasRecasted ? 'recasted' : 'not recasted'} this cast
           </p>
-          <p style={{ fontSize: '18px', color: 'white', textAlign: 'center', maxWidth: '80%', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>{castInfo.text}</p>
+          <p style={{ fontSize: '18px', color: '#999', textAlign: 'center', maxWidth: '80%' }}>{castInfo.text}</p>
         </div>
       ),
       intents: [
@@ -253,20 +198,9 @@ app.frame('/check-interaction', async (c) => {
     console.error('Error in /check-interaction:', error);
     return c.res({
       image: (
-        <div style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          width: '100%', 
-          height: '100%', 
-          backgroundImage: `url(${BACKGROUND_IMAGE})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          fontFamily: 'Arial, sans-serif'
-        }}>
-          <h1 style={{ fontSize: '48px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Error</h1>
-          <p style={{ fontSize: '24px', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>An error occurred while checking the interaction. Please try again later.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', backgroundColor: '#f0f0f0', fontFamily: 'Arial, sans-serif' }}>
+          <h1 style={{ fontSize: '48px', color: '#333', marginBottom: '20px' }}>Error</h1>
+          <p style={{ fontSize: '24px', color: '#666' }}>An error occurred while checking the interaction. Please try again later.</p>
         </div>
       ),
       intents: [
@@ -277,57 +211,7 @@ app.frame('/check-interaction', async (c) => {
   }
 })
 
-app.frame('/recast', (c) => {
-  return c.res({
-    image: (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        width: '100%', 
-        height: '100%', 
-        backgroundImage: `url(${BACKGROUND_IMAGE})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <h1 style={{ fontSize: '48px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Recasted!</h1>
-        <p style={{ fontSize: '24px', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>You recasted the frame. This action would be recorded on Farcaster.</p>
-      </div>
-    ),
-    intents: [
-      <Button action="/check-interaction">Check Again</Button>,
-      <Button action="/">Back to Home</Button>
-    ],
-  })
-})
-
-app.frame('/like', (c) => {
-  return c.res({
-    image: (
-      <div style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        width: '100%', 
-        height: '100%', 
-        backgroundImage: `url(${BACKGROUND_IMAGE})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        fontFamily: 'Arial, sans-serif'
-      }}>
-        <h1 style={{ fontSize: '48px', color: 'white', marginBottom: '20px', textShadow: '2px 2px 4px rgba(0,0,0,0.5)' }}>Liked!</h1>
-        <p style={{ fontSize: '24px', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.5)' }}>You liked the frame. This action would be recorded on Farcaster.</p>
-      </div>
-    ),
-    intents: [
-      <Button action="/check-interaction">Check Again</Button>,
-      <Button action="/">Back to Home</Button>
-    ],
-  })
-})
+// ... (rest of the code remains the same)
 
 export const GET = handle(app)
 export const POST = handle(app)
